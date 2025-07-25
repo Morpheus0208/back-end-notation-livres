@@ -1,0 +1,17 @@
+{
+  "env": {
+    "node": true,
+    "es2021": true
+  },
+  "extends": ["airbnb-base", "prettier"],
+  "plugins": [],
+  "rules": {
+    "no-console": "off",
+    "comma-dangle": ["error", "only-multiline"],
+    "quotes": ["error", "single"],
+    "semi": ["error", "always"],
+    "linebreak-style": ["error", "unix"],
+    "no-underscore-dangle": "off",
+    "import/prefer-default-export": "off"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "projet-6-back-end-notation-livres",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "eslint . --ext .js,.cjs,.mjs",
+    "lint:fix": "eslint . --ext .js,.cjs,.mjs --fix",
+    "format": "prettier --write \"*.js\" \"*.md\" \"src/**/*.js\" \"src/**/*.md\" \"scripts/**/*.js\" \"scripts/**/*.md\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "eslint": "^8.57.1",
+    "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-import": "^2.32.0",
+    "prettier": "^3.6.2"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "mongoose": "^8.16.5"
+  }
+}
