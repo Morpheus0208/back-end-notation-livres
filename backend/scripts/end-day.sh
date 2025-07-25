@@ -43,7 +43,11 @@ git merge --no-ff "$CURRENT_BRANCH"
 git push origin main
 
 # Suppression de la branche
-git branch -d "$CURRENT_BRANCH"
-git push origin --delete "$CURRENT_BRANCH"
+if [ "$CURRENT_BRANCH" != "main" ]; then
+  git branch -d "$CURRENT_BRANCH"
+  git push origin --delete "$CURRENT_BRANCH"
+else
+  echo -e "${RED}⚠️ Impossible de supprimer la branche 'main' (branche courante)${NC}"
+fi
 
 echo -e "${GREEN}✅ Fin de journée : Merge & Clean OK.${NC}"
