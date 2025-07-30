@@ -1,18 +1,12 @@
 const express = require('express');
-const mongoose = require('mongoose');
-
-mongoose
-  .connect(
-    'mongodb+srv://morpheus0208code:2eLMCAUlGWlp1Q9o@cluster0-openclassroom.utu2xsj.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0-openclassroom',
-    {}
-  )
-  .then(() => console.log('Connexion à MongoDB réussie !'))
-  .catch(() => console.log('Connexion à MongoDB échouée !'));
+const Book = require('./src/models/Book');
 
 const app = express();
 
+// Middlewares globaux
 app.use(express.json());
 
+// CORS
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader(
@@ -23,46 +17,45 @@ app.use((req, res, next) => {
   next();
 });
 
-app.post('/api/book', (req, res, next) => {
-  console.log(req.body);
-  res.status(201).json({
-    message: 'Livre créé !',
+// POST pour créer un livre
+
+app.post('/api/book', (req, res) => {
+  console.log('req.body:', req.body);
+  delete req.body._id; // On supprime l'id envoyé par le front
+  const book = new Book({
+    ...req.body,
   });
-  next();
+  book
+    .save()
+    .then(() => res.status(201).json({ message: 'Livre créé !' }))
+    .catch(error => res.status(400).json({ error }));
 });
 
+// PUT pour modifier un livre
+app.put('/api/book/:id', (req, res) => {
+  delete req.body._id; // On supprime l'id envoyé par le front
+  Book.updateOne({ _id: req.params.id }, { ...req.body, _id: req.params.id })
+    .then(() => res.status(200).json({ message: 'Livre modifié !' }))
+    .catch(error => res.status(400).json({ error }));
+});
+// DELETE pour supprimer un livre
+app.delete('/api/book/:id', (req, res) => {
+  Book.deleteOne({ _id: req.params.id })
+    .then(() => res.status(200).json({ message: 'Livre supprimé !' }))
+    .catch(error => res.status(400).json({ error }));
+});
+// GET pour récupérer un livre par son ID
+app.get('/api/book/:id', (req, res) => {
+  Book.findOne({ _id: req.params.id })
+    .then(book => res.status(200).json(book))
+    .catch(error => res.status(404).json({ error }));
+});
+
+// GET pour récupérer tous les livres
 app.get('/api/book', (req, res) => {
-  const book = [
-    {
-      _userid: 'oeihfzeoi',
-      title: 'Mon premier livre',
-      author: 'john Doe',
-      imageUrl: 'https://cdn.pixabay.com/photo/2019/06/11/18/56/camera-4267692_1280.jpg',
-      year: 2025,
-      genre: 'Science Fiction',
-      rating: [
-        {
-          userId: 'qsomihvqios',
-          rating: 4,
-        },
-      ],
-    },
-    {
-      _userid: 'oeihfzeomoihi',
-      title: 'Mon deuxième livre',
-      author: 'jane Doe',
-      imageUrl: 'https://cdn.pixabay.com/photo/2019/06/11/18/56/camera-4267692_1280.jpg',
-      year: 2025,
-      genre: 'biographie',
-      rating: [
-        {
-          userId: 'oeihfzeomoihi',
-          rating: 1,
-        },
-      ],
-    },
-  ];
-  res.status(200).json(book);
+  Book.find()
+    .then(books => res.status(200).json(books))
+    .catch(error => res.status(400).json({ error }));
 });
 
 module.exports = app;
