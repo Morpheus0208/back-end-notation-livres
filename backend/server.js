@@ -1,6 +1,9 @@
 require('dotenv').config();
 const http = require('http');
 const app = require('./app');
+const connectDB = require('./src/config/db');
+// Connect to MongoDB using the URI from the .env file
+connectDB();
 
 const server = http.createServer(app);
 
@@ -28,12 +31,10 @@ const errorHandler = error => {
   switch (error.code) {
     case 'EACCES':
       console.error(`${bind} requires elevated privileges.`);
-      process.exit(1);
-      break;
+      return process.exit(1);
     case 'EADDRINUSE':
       console.error(`${bind} is already in use.`);
-      process.exit(1);
-      break;
+      return process.exit(1);
     default:
       throw error;
   }
