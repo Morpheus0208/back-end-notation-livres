@@ -1,5 +1,6 @@
 const express = require('express');
 const bookRoutes = require('./src/routes/book');
+const userRoutes = require('./src/routes/user');
 
 const app = express();
 
@@ -19,5 +20,5 @@ app.use((req, res, next) => {
 
 // Routes
 app.use('/api/books', bookRoutes);
-
+app.use('/api/auth', userRoutes);
 module.exports = app;

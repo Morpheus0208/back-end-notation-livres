@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-const uniqueValidator = require('mongoose-unique-validator');
 
 const userSchema = mongoose.Schema({
   email: {
@@ -13,6 +12,13 @@ const userSchema = mongoose.Schema({
   },
 });
 
-userSchema.plugin(uniqueValidator);
+// Pour capter proprement les erreurs d'unicité
+userSchema.post('save', (error, _, next) => {
+  if (error.code === 11000) {
+    next(new Error('Email déjà utilisé'));
+  } else {
+    next(error);
+  }
+});
 
 module.exports = mongoose.model('User', userSchema);
