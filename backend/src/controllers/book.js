@@ -22,12 +22,12 @@ exports.deleteBook = (req, res) => {
     .then(() => res.status(200).json({ message: 'Livre supprimé !' }))
     .catch(error => res.status(400).json({ error }));
 };
-exports.readBookById = (req, res) => {
+exports.getBookById = (req, res) => {
   Book.findOne({ _id: req.params.id })
     .then(book => res.status(200).json(book))
     .catch(error => res.status(404).json({ error }));
 };
-exports.readAllBooks = (req, res) => {
+exports.getAllBooks = (req, res) => {
   Book.find()
     .then(books => res.status(200).json(books))
     .catch(error => res.status(400).json({ error }));
