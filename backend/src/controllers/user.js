@@ -1,4 +1,5 @@
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
 exports.signupUser = (req, res) => {
@@ -9,10 +10,14 @@ exports.signupUser = (req, res) => {
         email: req.body.email,
         password: hash,
       });
+
       return user.save();
     })
     .then(() => res.status(201).json({ message: 'Utilisateur créé !' }))
-    .catch(error => res.status(400).json({ error }));
+    .catch(error => {
+      console.error('Erreur Mongoose:', error); // ⬅️ Log de l’erreur
+      res.status(400).json({ error });
+    });
 };
 
 exports.loginUser = (req, res) => {
@@ -27,7 +32,11 @@ exports.loginUser = (req, res) => {
         }
         return res.status(200).json({
           userId: user._id,
-          token: 'TOKEN', // TOKEN a remplacer par un vrai token JWT
+          token: jwt.sign(
+            { userId: user._id },
+            'RANDOM_TOKEN_SECRET', // Remplacer par une clé secrète réelle
+            { expiresIn: '24h' }
+          ),
         });
       });
     })
