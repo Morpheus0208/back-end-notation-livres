@@ -19,6 +19,10 @@ app.use((req, res, next) => {
 });
 
 // Routes
+app.use((req, res, next) => {
+  console.log(`[${req.method}] ${req.url}`, req.body);
+  next();
+});
 app.use('/api/books', bookRoutes);
 app.use('/api/auth', userRoutes);
 module.exports = app;
