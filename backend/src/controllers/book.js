@@ -1,70 +1,140 @@
-const fs = require('fs');
+const fs = require('fs/promises');
+const path = require('path');
 const Book = require('../models/Book');
+const { IMAGES_DIR } = require('../config/paths');
 
-exports.createBook = (req, res) => {
-  const bookObject = JSON.parse(req.body.book);
-  delete bookObject._id; // On supprime l'id envoyé par le front
-  delete bookObject._userId; // On supprime l'id de l'utilisateur envoyé par le front
-  if (req.file) {
-    bookObject.imageUrl = `${req.protocol}://${req.get('host')}/images/${req.file.filename}`;
-    const book = new Book({
-      ...bookObject,
-      imageUrl: req.file
-        ? `${req.protocol}://${req.get('host')}/images/${req.file.filename}`
-        : null,
-    });
-    book
-      .save()
-      .then(() => res.status(201).json({ message: 'Livre créé !' }))
-      .catch(error => res.status(400).json({ error }));
+function extractImageName(imageUrl = '') {
+  const [, name] = String(imageUrl).split('/images/');
+  return name || null;
+}
+function parseBookBody(req) {
+  // Accepte 2 cas : multipart (req.body.book = string JSON) ou JSON pur
+  if (req.body && typeof req.body.book === 'string') {
+    return JSON.parse(req.body.book);
+  }
+  return req.body || {};
+}
+
+exports.createBook = async (req, res, next) => {
+  try {
+    const bookObject = parseBookBody(req);
+    delete bookObject._id; // On supprime l'id envoyé par le front
+    delete bookObject._userId; // On supprime l'id de l'utilisateur envoyé par le front
+
+    bookObject.userId = req.auth.userId; // On ajoute l'id de l'utilisateur authentifié
+
+    if (!req.fileUrl) {
+      return res.status(400).json({ error: 'Image manquante' });
+    }
+
+    bookObject.imageUrl = req.fileUrl; // On ajoute l'URL de l'image si elle existe`;
+    bookObject.averageRating = 0; // Initialisation de la note moyenne
+    bookObject.ratings = []; // Initialisation du tableau de notes
+
+    await new Book(bookObject).save(); // Création d'une nouvelle instance de Book et sauvegarde
+    return res.status(201).json({ message: 'Livre créé !' });
+  } catch (err) {
+    return next(err);
   }
 };
 
-exports.updateBook = (req, res) => {
-  const bookObject = req.file
-    ? {
-        ...JSON.parse(req.body.book),
-        imageUrl: `${req.protocol}://${req.get('host')}/images/${req.file.filename}`,
-      }
-    : { ...req.body };
+exports.updateBook = async (req, res, next) => {
+  try {
+    const bookObject = await Book.findById(req.params.id);
+    if (!bookObject) {
+      return res.status(404).json({ message: 'Livre non trouvé' });
+    }
+    // Vérification que l'utilisateur authentifié est bien celui qui a créé le livre
+    if (bookObject.userId !== req.auth.userId) {
+      return res.status(403).json({ message: 'Non autorisé !' });
+    }
 
-  delete bookObject._Userid;
+    // On parse le corps de la requête pour obtenir les données du livre
+    const bookBody = parseBookBody(req);
 
-  Book.findOne({ _id: req.params.id })
-    .then(book => {
-      if (book.userId !== req.auth.userID) {
-        res.status(401).json({ message: 'Non autorisé !' });
-      } else {
-        Book.updateOne({ _id: req.params.id }, { ...bookObject, _id: req.params.id })
-          .then(() => res.status(200).json({ message: 'Livre modifié !' }))
-          .catch(error => res.status(400).json({ error }));
-      }
-    })
-    .catch(error => res.status(400).json({ error }));
-};
-exports.deleteBook = (req, res) => {
-  Book.findOne({ _id: req.params.id })
-    .then(book => {
-      if (book.userId !== req.auth.userID) {
-        res.status(401).json({ message: 'Non autorisé !' });
+    // On supprime les champs non nécessaires
+    delete bookBody._id; // On supprime l'id envoyé par le front
+    delete bookBody._userId; // On supprime l'id de l'utilisateur envoyé par le front
+
+    // On gère l'image : si une nouvelle image est envoyée, on la traite
+    let oldFileToDelete = null;
+    if (req.fileUrl) {
+      if (bookObject.imageUrl) {
+        const oldName = extractImageName(bookObject.imageUrl);
+        if (oldName) {
+          oldFileToDelete = path.join(IMAGES_DIR, oldName);
+        }
+        bookBody.imageUrl = req.fileUrl;
       }
 
-      const filename = book.imageUrl.split('/images/')[1];
-      fs.unlink(`images/${filename}`, () => {
-        Book.deleteOne({ _id: req.params.id })
-          .then(() => res.status(200).json({ message: 'Livre supprimé !' }))
-          .catch(error => res.status(400).json({ error }));
-      });
-    })
-    .catch(error => res.status(500).json({ error }));
+      Object.assign(bookObject, bookBody); // Met à jour les propriétés du livre
+
+      await bookObject.save(); // Enregistre les modifications dans la base de données
+
+      if (oldFileToDelete) {
+        try {
+          await fs.unlink(oldFileToDelete); // Supprime l'ancienne image si elle existe
+        } catch (err) {
+          if (err.code !== 'ENOENT') {
+            throw err; // Ignore l'erreur si le fichier n'existe pas
+          }
+        }
+      }
+    }
+    return res.status(200).json({ message: 'Livre modifié !' });
+  } catch (err) {
+    return next(err);
+  }
 };
-exports.getBookById = (req, res) => {
-  Book.findOne({ _id: req.params.id })
-    .then(book => res.status(200).json(book))
-    .catch(error => res.status(404).json({ error }));
+
+exports.deleteBook = async (req, res, next) => {
+  try {
+    const bookObject = await Book.findById(req.params.id);
+
+    if (!bookObject) {
+      return res.status(404).json({ message: 'Livre non trouvé' });
+    }
+
+    if (bookObject.userId !== req.auth.userId) {
+      return res.status(403).json({ message: 'Non autorisé !' });
+    }
+    // On extrait le nom de l'image à partir de l'URL
+    const name = extractImageName(bookObject.imageUrl);
+    // Si un nom d'image est trouvé, on tente de la supprimer
+    if (name) {
+      const filePath = path.join(IMAGES_DIR, name);
+      try {
+        await fs.unlink(filePath); // Supprime l'image associée au livre
+      } catch (err) {
+        if (err.code !== 'ENOENT') {
+          return next(err); // Propagation de l'erreur si le fichier n'existe pas
+        }
+      }
+    }
+    await Book.deleteOne({ _id: req.params.id });
+    return res.status(200).json({ message: 'Livre supprimé !' });
+  } catch (err) {
+    return next(err);
+  }
 };
-exports.getAllBooks = (req, res) => {
-  Book.find()
-    .then(books => res.status(200).json(books))
-    .catch(error => res.status(400).json({ error }));
+exports.getBookById = async (req, res, next) => {
+  try {
+    const book = await Book.findById({ _id: req.params.id });
+    if (!book) {
+      return res.status(404).json({ error: 'Livre non trouvé' });
+    }
+
+    return res.status(200).json(book);
+  } catch (err) {
+    return next(err);
+  }
+};
+
+exports.getAllBooks = async (req, res, next) => {
+  try {
+    const books = await Book.find({});
+    return res.status(200).json(books);
+  } catch (err) {
+    return next(err);
+  }
 };
