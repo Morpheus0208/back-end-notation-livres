@@ -1,7 +1,8 @@
 const express = require('express');
-const path = require('path');
+
 const bookRoutes = require('./src/routes/book');
 const userRoutes = require('./src/routes/user');
+const { IMAGES_DIR } = require('./src/config/paths');
 
 const app = express();
 // Middlewares globaux
@@ -19,13 +20,13 @@ app.use((req, res, next) => {
 });
 
 // Routes
-app.use('/images', express.static(path.join(__dirname, 'images')));
+
 app.use((req, res, next) => {
   console.log(`[${req.method}] ${req.url}`, req.body);
   next();
 });
 app.use('/api/books', bookRoutes);
 app.use('/api/auth', userRoutes);
-app.use('/images', express.static('images'));
+app.use('/images', express.static(IMAGES_DIR));
 
 module.exports = app;
