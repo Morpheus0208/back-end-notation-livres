@@ -1,38 +1,72 @@
 const fs = require('fs/promises');
 const path = require('path');
 const Book = require('../models/Book');
+const { parseBookBody } = require('../utils/parseBookBody');
+const { extractImageName } = require('../utils/extractImageName');
 const { IMAGES_DIR } = require('../config/paths');
 
-function extractImageName(imageUrl = '') {
-  const [, name] = String(imageUrl).split('/images/');
-  return name || null;
-}
-function parseBookBody(req) {
-  // Accepte 2 cas : multipart (req.body.book = string JSON) ou JSON pur
-  if (req.body && typeof req.body.book === 'string') {
-    return JSON.parse(req.body.book);
-  }
-  return req.body || {};
+// Retire _id et _userId
+function sanitizeIds(input) {
+  if (!input || typeof input !== 'object') return input;
+  const { _id, _userId, ...safe } = input;
+  return safe;
 }
 
 exports.createBook = async (req, res, next) => {
   try {
-    const bookObject = parseBookBody(req);
-    delete bookObject._id; // On supprime l'id envoyé par le front
-    delete bookObject._userId; // On supprime l'id de l'utilisateur envoyé par le front
+    const bookObject = sanitizeIds(parseBookBody(req)); // On supprime les champs id et id de l'utilisateur  envoyé par le front et on parse le corps de la requête
 
     bookObject.userId = req.auth.userId; // On ajoute l'id de l'utilisateur authentifié
 
-    if (!req.fileUrl) {
-      return res.status(400).json({ error: 'Image manquante' });
+    // On part du principe que tout est présent et correct
+    const title = bookObject && bookObject.title ? String(bookObject.title) : '';
+    const author = bookObject && bookObject.author ? String(bookObject.author) : '';
+    const year = bookObject && bookObject.year != null ? Number(bookObject.year) : undefined;
+    const genre = bookObject && bookObject.genre ? String(bookObject.genre) : undefined;
+
+    const authUserId = req && req.auth ? req.auth.userId : null;
+
+    // 1) Construire ratings initiaux (0..1 entrée) si fournis
+    let ratings = [];
+    if (bookObject && Array.isArray(bookObject.ratings) && bookObject.ratings.length > 0) {
+      const first = bookObject.ratings[0] || {};
+      const raw = first.grade !== undefined ? first.grade : first.rating;
+      const g = typeof raw === 'number' ? raw : Number(raw);
+      ratings = [{ userId: authUserId, grade: g }];
+    } else if (bookObject && bookObject.rating !== undefined) {
+      const g =
+        typeof bookObject.rating === 'number' ? bookObject.rating : Number(bookObject.rating);
+      ratings = [{ userId: authUserId, grade: g }];
+    } else if (bookObject && bookObject.averageRating !== undefined) {
+      const g =
+        typeof bookObject.averageRating === 'number'
+          ? bookObject.averageRating
+          : Number(bookObject.averageRating);
+      ratings = [{ userId: authUserId, grade: g }];
     }
 
-    bookObject.imageUrl = req.fileUrl; // On ajoute l'URL de l'image si elle existe`;
-    bookObject.averageRating = 0; // Initialisation de la note moyenne
-    bookObject.ratings = []; // Initialisation du tableau de notes
+    // 2) Calculer la moyenne (simple)
+    let averageRating = 0;
+    if (ratings.length > 0) {
+      const sum = ratings.reduce((a, r) => a + r.grade, 0);
+      averageRating = Math.round((sum / ratings.length) * 10) / 10;
+    }
 
-    await new Book(bookObject).save(); // Création d'une nouvelle instance de Book et sauvegarde
-    return res.status(201).json({ message: 'Livre créé !' });
+    // 3) Créer le livre
+    await Book.create({
+      title,
+      author,
+      year,
+      genre,
+      userId: authUserId,
+      imageUrl: req.fileUrl, // supposé présent via middleware
+      ratings,
+      averageRating,
+    });
+
+    return res.status(201).json({
+      message: 'Livre créé (rating initial appliqué si fourni).',
+    });
   } catch (err) {
     return next(err);
   }
@@ -49,12 +83,8 @@ exports.updateBook = async (req, res, next) => {
       return res.status(403).json({ message: 'Non autorisé !' });
     }
 
-    // On parse le corps de la requête pour obtenir les données du livre
-    const bookBody = parseBookBody(req);
-
-    // On supprime les champs non nécessaires
-    delete bookBody._id; // On supprime l'id envoyé par le front
-    delete bookBody._userId; // On supprime l'id de l'utilisateur envoyé par le front
+    // On supprime le _id et _userId du front et on parse le corps de la requête pour obtenir les données du livre
+    const bookBody = sanitizeIds(parseBookBody(req));
 
     // On gère l'image : si une nouvelle image est envoyée, on la traite
     let oldFileToDelete = null;
@@ -133,6 +163,38 @@ exports.getBookById = async (req, res, next) => {
 exports.getAllBooks = async (req, res, next) => {
   try {
     const books = await Book.find({});
+    return res.status(200).json(books);
+  } catch (err) {
+    return next(err);
+  }
+};
+
+exports.rateBook = async (req, res, next) => {
+  try {
+    const { id } = req.params; // supposé correct
+    const authUserId = req.auth.userId; // supposé présent
+    const g = typeof req.body.rating === 'number' ? req.body.rating : Number(req.body.rating);
+
+    const book = await Book.findById(id); // document Mongoose
+    // On suppose le livre existant
+
+    if (!Array.isArray(book.ratings)) book.ratings = [];
+    book.ratings.push({ userId: authUserId, grade: g });
+
+    // Recalcul simple de la moyenne
+    const sum = book.ratings.reduce((a, r) => a + r.grade, 0);
+    book.averageRating = Math.round((sum / book.ratings.length) * 10) / 10;
+
+    await book.save();
+    return res.status(200).json(book);
+  } catch (err) {
+    return next(err);
+  }
+};
+
+exports.getBestRating = async (req, res, next) => {
+  try {
+    const books = await Book.find().sort({ averageRating: -1, _id: 1 }).limit(3);
     return res.status(200).json(books);
   } catch (err) {
     return next(err);
