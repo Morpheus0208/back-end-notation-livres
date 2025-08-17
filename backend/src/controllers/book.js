@@ -22,7 +22,6 @@ exports.createBook = async (req, res, next) => {
     const author = bookObject && bookObject.author ? String(bookObject.author) : '';
     const year = bookObject && bookObject.year != null ? Number(bookObject.year) : undefined;
     const genre = bookObject && bookObject.genre ? String(bookObject.genre) : undefined;
-
     const authUserId = req && req.auth ? req.auth.userId : null;
 
     // Note initiale (au plus une)
